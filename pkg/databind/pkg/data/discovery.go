@@ -4,9 +4,11 @@
 package data
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const (
@@ -31,8 +33,25 @@ const (
 	EntityRewriteActionReplace = "replace"
 )
 
-type Map map[string]string
-type InterfaceMap map[string]interface{}
+var ErrNotFound = errors.New("TTL value not found")
+
+type ValuesWithTtl interface {
+	TTL() (time.Duration, error)
+}
+
+type (
+	Map          map[string]string
+	InterfaceMap map[string]interface{}
+	// InterfaceMapWithTtl is a custom implementation of a payload exposing a TTL
+	InterfaceMapWithTtl map[string]interface{}
+)
+
+func (ttl InterfaceMapWithTtl) TTL() (time.Duration, error) {
+	if val, ok := ttl["ttl"]; ok {
+		return time.ParseDuration(val.(string))
+	}
+	return 0, ErrNotFound
+}
 
 type Transformed struct {
 	Variables         interface{}
@@ -101,6 +120,10 @@ func AddValues(dst Map, prefix string, val interface{}) {
 			AddValues(dst, pfx+k, v)
 		}
 	case InterfaceMap:
+		for k, v := range value {
+			AddValues(dst, pfx+k, v)
+		}
+	case InterfaceMapWithTtl:
 		for k, v := range value {
 			AddValues(dst, pfx+k, v)
 		}

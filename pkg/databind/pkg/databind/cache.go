@@ -4,10 +4,15 @@
 package databind
 
 import (
+	"errors"
 	"time"
 
 	"github.com/newrelic/infrastructure-agent/pkg/databind/internal/discovery"
+	"github.com/newrelic/infrastructure-agent/pkg/databind/pkg/data"
+	"github.com/newrelic/infrastructure-agent/pkg/log"
 )
+
+var clog = log.WithComponent("DatabindCache")
 
 // cachedEntry allows storing a value for a given Time-To-Leave
 type cachedEntry struct {
@@ -78,6 +83,16 @@ func (d *gatherer) do(now time.Time) (interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	if dataWithTtl, ok := vals.(data.ValuesWithTtl); ok {
+		ttl, err := dataWithTtl.TTL()
+		if err != nil && !errors.Is(err, data.ErrNotFound) {
+			clog.WithError(err).Error("cannot retrieve ttl from secrets")
+		} else if err == nil {
+			d.cache.ttl = ttl
+		}
+	}
+
 	d.cache.set(vals, now)
 	return vals, nil
 }

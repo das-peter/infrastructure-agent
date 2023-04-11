@@ -259,6 +259,13 @@ func (v *varEntry) validate() error {
 			return err
 		}
 	}
+	// TODO can we leave this here? everything is coupled so it's not easy to do an e2e test
+	if v.Test != nil {
+		sections++
+		if err := v.Test.Validate(); err != nil {
+			return err
+		}
+	}
 	if sections == 0 {
 		return errors.New("you should specify one source to gather the variable: aws-kms or vault or cyberark-cli")
 	}
@@ -274,19 +281,16 @@ func (v *varEntry) selectGatherer(ttl time.Duration) *gatherer {
 			cache: cachedEntry{ttl: ttl},
 			fetch: secrets.KMSGatherer(v.KMS),
 		}
-
 	} else if v.Vault != nil {
 		return &gatherer{
 			cache: cachedEntry{ttl: ttl},
 			fetch: secrets.VaultGatherer(v.Vault),
 		}
-
 	} else if v.CyberArkCLI != nil {
 		return &gatherer{
 			cache: cachedEntry{ttl: ttl},
 			fetch: secrets.CyberArkCLIGatherer(v.CyberArkCLI),
 		}
-
 	} else if v.CyberArkAPI != nil {
 		return &gatherer{
 			cache: cachedEntry{ttl: ttl},

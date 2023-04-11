@@ -5,6 +5,7 @@ package databind
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -102,6 +103,46 @@ variables:
 		t.Run(input.description, func(t *testing.T) {
 			_, err := LoadYAML([]byte(input.yaml))
 			assert.Error(t, err)
+		})
+	}
+}
+
+func Test_TtlInConfiguration(t *testing.T) {
+	t.Parallel()
+	inputs := []struct {
+		description string
+		yaml        string
+		expectedTtl time.Duration
+	}{
+		{
+			description: "no TTL defaults to defaultVariablesTTL",
+			yaml: `
+variables:
+  myData:
+    aws-kms:
+      data: T0hBSStGTEVY
+      region: us-east-1
+`,
+			expectedTtl: defaultVariablesTTL,
+		},
+		{
+			description: "TTL should override defaultVariablesTTL",
+			yaml: `
+variables:
+  myData:
+    aws-kms:
+      data: T0hBSStGTEVY
+      region: us-east-1
+    ttl: 5s
+`,
+			expectedTtl: time.Second * 5,
+		},
+	}
+	for _, input := range inputs {
+		t.Run(input.description, func(t *testing.T) {
+			sources, err := LoadYAML([]byte(input.yaml))
+			assert.NoError(t, err)
+			assert.Equal(t, input.expectedTtl, sources.variables["myData"].cache.ttl)
 		})
 	}
 }
