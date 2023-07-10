@@ -9,6 +9,8 @@
 package process
 
 import (
+	"time"
+
 	"github.com/newrelic/infrastructure-agent/internal/agent"
 	"github.com/newrelic/infrastructure-agent/pkg/config"
 	"github.com/newrelic/infrastructure-agent/pkg/metrics"
@@ -16,7 +18,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/shirou/gopsutil/v3/process"
 	"github.com/sirupsen/logrus"
-	"time"
 )
 
 func newHarvester(ctx agent.AgentContext) *darwinHarvester {
@@ -25,7 +26,7 @@ func newHarvester(ctx agent.AgentContext) *darwinHarvester {
 	privileged := cfg == nil || cfg.RunMode == config.ModeRoot || cfg.RunMode == config.ModePrivileged
 	disableZeroRSSFilter := cfg != nil && cfg.DisableZeroRSSFilter
 	stripCommandLine := (cfg != nil && cfg.StripCommandLine) || (cfg == nil && config.DefaultStripCommandLine)
-	//decouple the process from the harvester
+	// decouple the process from the harvester
 	s := NewProcessRetrieverCached(time.Second * 10)
 	processRetriever := s.ProcessById
 
@@ -37,8 +38,6 @@ func newHarvester(ctx agent.AgentContext) *darwinHarvester {
 		processRetriever:     processRetriever,
 	}
 }
-
-type ProcessRetriever func(int32) (Process, error)
 
 // darwinHarvester is a Harvester implementation that uses various darwin sources and manages process caches
 type darwinHarvester struct {

@@ -8,6 +8,8 @@
 package process
 
 import (
+	"time"
+
 	"github.com/newrelic/infrastructure-agent/internal/agent"
 	"github.com/newrelic/infrastructure-agent/pkg/config"
 	"github.com/newrelic/infrastructure-agent/pkg/metrics"
@@ -25,12 +27,16 @@ func newHarvester(ctx agent.AgentContext, cache *cache) *linuxHarvester {
 	disableZeroRSSFilter := cfg != nil && cfg.DisableZeroRSSFilter
 	stripCommandLine := (cfg != nil && cfg.StripCommandLine) || (cfg == nil && config.DefaultStripCommandLine)
 
+	s := NewProcessRetrieverCached(time.Second * 10)
+	processRetriever := s.ProcessById
+
 	return &linuxHarvester{
 		privileged:           privileged,
 		disableZeroRSSFilter: disableZeroRSSFilter,
 		stripCommandLine:     stripCommandLine,
 		serviceForPid:        ctx.GetServiceForPid,
 		cache:                cache,
+		processRetriever:     processRetriever,
 	}
 }
 
@@ -41,6 +47,7 @@ type linuxHarvester struct {
 	stripCommandLine     bool
 	cache                *cache
 	serviceForPid        func(int) (string, bool)
+	processRetriever     ProcessRetriever
 }
 
 var _ Harvester = (*linuxHarvester)(nil) // static interface assertion
@@ -62,7 +69,7 @@ func (ps *linuxHarvester) Do(pid int32, elapsedSeconds float64) (*types.ProcessS
 		cached = &cacheEntry{}
 	}
 	var err error
-	cached.process, err = getLinuxProcess(pid, cached.process, ps.privileged)
+	cached.process, err = getLinuxProcess(pid, cached.process, ps.privileged, ps.processRetriever)
 	if err != nil {
 		return nil, errors.Wrap(err, "can't create process")
 	}
@@ -103,23 +110,44 @@ func (ps *linuxHarvester) Do(pid int32, elapsedSeconds float64) (*types.ProcessS
 	return sample, nil
 }
 
+//// populateStaticData populates the sample with the process data won't vary during the process life cycle
+//func (ps *linuxHarvester) populateStaticData(sample *types.ProcessSample, process Snapshot) error {
+//	var err error
+//	sample.CmdLine, err = process.CmdLine(!ps.stripCommandLine)
+//	if err != nil {
+//		return errors.Wrap(err, "acquiring command line")
+//	}
+//
+//	sample.ProcessID = process.Pid()
+//
+//	sample.User, err = process.Username()
+//	if err != nil {
+//		mplog.WithError(err).WithField("processID", sample.ProcessID).Debug("Can't get Username for process.")
+//	}
+//
+//	sample.CommandName = process.Command()
+//	sample.ParentProcessID = process.Ppid()
+//
+//	return nil
+//}
+
 // populateStaticData populates the sample with the process data won't vary during the process life cycle
-func (ps *linuxHarvester) populateStaticData(sample *types.ProcessSample, process Snapshot) error {
+func (ps *linuxHarvester) populateStaticData(sample *types.ProcessSample, processSnapshot Snapshot) error {
 	var err error
-	sample.CmdLine, err = process.CmdLine(!ps.stripCommandLine)
+
+	sample.CmdLine, err = processSnapshot.CmdLine(!ps.stripCommandLine)
 	if err != nil {
 		return errors.Wrap(err, "acquiring command line")
 	}
 
-	sample.ProcessID = process.Pid()
-
-	sample.User, err = process.Username()
+	sample.User, err = processSnapshot.Username()
 	if err != nil {
 		mplog.WithError(err).WithField("processID", sample.ProcessID).Debug("Can't get Username for process.")
 	}
 
-	sample.CommandName = process.Command()
-	sample.ParentProcessID = process.Ppid()
+	sample.ProcessID = processSnapshot.Pid()
+	sample.CommandName = processSnapshot.Command()
+	sample.ParentProcessID = processSnapshot.Ppid()
 
 	return nil
 }

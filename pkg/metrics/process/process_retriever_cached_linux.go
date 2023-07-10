@@ -1,7 +1,7 @@
 // Copyright New Relic Corporation. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//go:build darwin
+//go:build linux
 
 package process
 
@@ -12,7 +12,7 @@ import (
 
 func (s *ProcessRetrieverCached) retrieveProcesses(psBin string) (map[int32]psItem, error) {
 	// get all processes info
-	args := []string{"ax", "-c", "-o", "uid,pid,ppid,user,state,utime,stime,etime,rss,vsize,pagein,command"}
+	args := []string{"ax", "-o", "uid,pid,ppid,user,state,utime,stime,etime,rss,vsize,pagein,ucmd"}
 	out, err := commandRunner(psBin, "", args...)
 	if err != nil {
 		return nil, err
@@ -28,7 +28,7 @@ func (s *ProcessRetrieverCached) retrieveProcesses(psBin string) (map[int32]psIt
 			}
 			lineItems = append(lineItems, strings.TrimSpace(lineItem))
 		}
-		if len(lineItems) > 11 {
+		if len(lineItems) > 10 {
 			uid, _ := strconv.Atoi(lineItems[0])
 			pid, _ := strconv.Atoi(lineItems[1])
 			ppid, _ := strconv.Atoi(lineItems[2])
@@ -58,7 +58,7 @@ func (s *ProcessRetrieverCached) retrieveProcesses(psBin string) (map[int32]psIt
 			}
 			items[int32(pid)] = item
 		} else {
-			mplog.WithField("ps_output", out).Error("ps output is expected to have >11 columns")
+			mplog.WithField("ps_output", out).Error("ps output is expected to have >10 columns")
 		}
 	}
 	return items, nil
@@ -66,7 +66,7 @@ func (s *ProcessRetrieverCached) retrieveProcesses(psBin string) (map[int32]psIt
 
 func (s *ProcessRetrieverCached) getProcessThreads(psBin string) (map[int32]int32, error) {
 	// get all processes info with threads
-	args := []string{"ax", "-M", "-c"}
+	args := []string{"-eLf"}
 	out, err := commandRunner(psBin, "", args...)
 	if err != nil {
 		return nil, err
@@ -75,10 +75,6 @@ func (s *ProcessRetrieverCached) getProcessThreads(psBin string) (map[int32]int3
 	lines := strings.Split(out, "\n")
 	processThreads := make(map[int32]int32)
 	for _, line := range lines[1:] {
-		if len(line) > 0 && line[0] != ' ' {
-			// we exclude main process for simplicity
-			continue
-		}
 		for _, lineItem := range strings.Split(line, " ") {
 			if lineItem == "" {
 				continue
@@ -90,7 +86,7 @@ func (s *ProcessRetrieverCached) getProcessThreads(psBin string) (map[int32]int3
 			}
 			pid := int32(pidAsInt)
 			if _, ok := processThreads[pid]; !ok {
-				processThreads[pid] = 1 // main process already included
+				processThreads[pid] = 0 // main process already included
 			}
 			processThreads[pid]++
 			// we are only interested in pid so break and process next line

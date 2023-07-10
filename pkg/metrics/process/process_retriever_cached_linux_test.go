@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/newrelic/infrastructure-agent/pkg/helpers"
+
 	"github.com/shirou/gopsutil/v3/cpu"
 	process2 "github.com/shirou/gopsutil/v3/process"
 	"github.com/stretchr/testify/assert"
@@ -16,16 +18,19 @@ import (
 )
 
 var psOut = []string{
-	`PID  PPID USER             STAT     UTIME     STIME     ELAPSED    RSS      VSZ PAGEIN COMMAND
-    1     0 root             Ss     3:56.38  18:41.21 07-21:03:49  12000  4481064      0 launchd
-   68     1 joe              S      0:20.99   0:38.18 07-21:03:41    920  4471000      0 Google Chrome
-   73     1 root             Ss     2:06.17   4:13.62 07-21:03:41   3108  4477816      0 fseventsd
-   74    48 pam	             Ss     0:00.02   0:00.09 07-21:03:41     64  4322064      0 systemstats`,
+	`  UID     PID    PPID USER     S  UTIME STIME     ELAPSED   RSS    VSZ PAGEIN CMD
+ 1000 2197992 2197991 vagrant  S      - 10:36       37:21  4848   9636      6 bash
+    0 2198210 2197992 root     S      - 10:36       37:07  3764  12552      3 sudo
+    0 2198225 2198210 root     S      - 10:36       37:07  3772  11480      0 su
+    0 2198226 2198225 root     S      - 10:36       37:07  3632   7192      0 bash
+    0 2198455 2198226 root     S      - 10:36       36:55  2956   6864      8 tmux: client`,
 
-	`PID  PPID USER             STAT     UTIME     STIME     ELAPSED    RSS      VSZ PAGEIN COMMAND
-    1     0 root             Ss     3:58.38  18:51.21 07-21:04:49  12200  4482064      0 launchd
-   68     1 joe              Ss     0:23.99   0:48.18 07-21:04:41    910  4473000      0 Google Chrome
-   74    48 pam	             Ss     0:00.10   0:20.09 07-21:04:41     84  4324064      0 systemstats`,
+	`  UID     PID    PPID USER     S  UTIME STIME     ELAPSED   RSS    VSZ PAGEIN CMD
+ 1000 2197992 2197991 vagrant  S      - 10:36       37:21  4848   9636      6 bash
+    0 2198210 2197992 root     S      - 10:36       37:07  3764  12552      3 sudo
+    0 2198225 2198210 root     S      - 10:36       37:08  3779  11480      0 su
+    0 2198226 2198225 root     S      - 10:36       37:07  3632   7192      0 bash
+`,
 }
 
 var psCmdOut = []string{
@@ -42,24 +47,24 @@ var psCmdOut = []string{
 }
 
 var psThreadsOut = []string{
-	`USER               PID   TT   %CPU STAT PRI     STIME     UTIME COMMAND
-root                 1   ??    0.0 S    31T   0:00.36   0:00.08 launchd
-                     1         0.0 S    20T   0:00.12   0:00.01
-                     1         0.0 S    37T   0:00.00   0:00.00
-                     1         0.0 S    37T   0:00.00   0:00.00
-joe                 68   ??    0.0 S     4T   0:01.13   0:00.30 syslogd
-                    68         0.0 S     4T   0:00.00   0:00.00
-root                73   ??    0.0 S     4T   0:01.13   0:00.30 fseventsd
-pam                 74         0.0 S     4T   0:00.00   0:00.00 systemstats`,
+	`UID          PID    PPID     LWP  C NLWP STIME TTY          TIME CMD
+root     1854468       1 1854520  0   3 Jul06 ?        00:00:04 /usr/lib/snapd/snapd
+root     1854468       1 1854621  0   3 Jul06 ?        00:00:04 /usr/lib/snapd/snapd
+root     1854468       1 1854622  0   3 Jul06 ?        00:00:05 /usr/lib/snapd/snapd
+otelcol+ 1865400       1 1865400  0    9 Jul07 ?        00:14:29 /usr/bin/otelcol-contrib --config=/etc/otelcol-contrib/config.yaml
+otelcol+ 1865400       1 1865416  0    9 Jul07 ?        00:11:58 /usr/bin/otelcol-contrib --config=/etc/otelcol-contrib/config.yaml
+otelcol+ 1865400       1 1865417  0    9 Jul07 ?        00:13:43 /usr/bin/otelcol-contrib --config=/etc/otelcol-contrib/config.yaml
+otelcol+ 1865400       1 1865418  0    9 Jul07 ?        00:00:00 /usr/bin/otelcol-contrib --config=/etc/otelcol-contrib/config.yaml
+otelcol+ 1865400       1 1865419  0    9 Jul07 ?        00:00:00 /usr/bin/otelcol-contrib --config=/etc/otelcol-contrib/config.yaml
+otelcol+ 1865400       1 1865420  0    9 Jul07 ?        00:11:10 /usr/bin/otelcol-contrib --config=/etc/otelcol-contrib/config.yaml
+otelcol+ 1865400       1 1865421  0    9 Jul07 ?        00:00:00 /usr/bin/otelcol-contrib --config=/etc/otelcol-contrib/config.yaml
+otelcol+ 1865400       1 1865422  0    9 Jul07 ?        00:16:04 /usr/bin/otelcol-contrib --config=/etc/otelcol-contrib/config.yaml
+otelcol+ 1865400       1 1866048  0    9 Jul07 ?        00:09:12 /usr/bin/otelcol-contrib --config=/etc/otelcol-contrib/config.yaml`,
 
-	`USER               PID   TT   %CPU STAT PRI     STIME     UTIME COMMAND
-root                 1   ??    0.0 S    31T   0:00.36   0:00.08 launchd
-                     1         0.0 S    20T   0:00.12   0:00.01
-                     1         0.0 S    37T   0:00.00   0:00.00
-                     1         0.0 S    37T   0:00.00   0:00.00
-joe                 68   ??    0.0 S     4T   0:01.13   0:00.30 syslogd
-                    68         0.0 S     4T   0:00.00   0:00.00
-pam                 74         0.0 S     4T   0:00.00   0:00.00 systemstats`,
+	`UID          PID    PPID     LWP  C NLWP STIME TTY          TIME CMD
+root     1854468       1 1854520  0   11 Jul06 ?        00:00:04 /usr/lib/snapd/snapd
+root     1854468       1 1854621  0   11 Jul06 ?        00:00:04 /usr/lib/snapd/snapd
+root     1854468       1 1854622  0   11 Jul06 ?        00:00:05 /usr/lib/snapd/snapd`,
 }
 
 // commandRunnerMock mocks CommandRunner and so we can mock ps results
@@ -84,6 +89,23 @@ func (c *commandRunnerMock) ShouldRunCommandMultipleTimes(command string, stdin 
 	c.
 		On("run", command, stdin, arguments).
 		Return(output, err)
+}
+
+func Test_getProcessThreads(t *testing.T) {
+	ttl := time.Second * 0
+	ret := NewProcessRetrieverCached(ttl)
+
+	defer func() {
+		commandRunner = helpers.RunCommand
+	}()
+
+	cmdRunMock := &commandRunnerMock{}
+	commandRunner = cmdRunMock.run
+	cmdRunMock.ShouldRunCommand("/bin/ps", "", []string{"-eLf"}, psThreadsOut[0], nil)
+
+	threads, err := ret.getProcessThreads("/bin/ps")
+	assert.NoError(t, err)
+	assert.Equal(t, map[int32]int32{1854468: 3, 1865400: 9}, threads)
 }
 
 func Test_ProcessRetrieverCached_InvalidPsOutputShouldNotBreakTheInternet(t *testing.T) {

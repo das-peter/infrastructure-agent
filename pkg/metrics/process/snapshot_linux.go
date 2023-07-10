@@ -23,8 +23,9 @@ type linuxProcess struct {
 	// if privileged == false, some operations will be avoided: FD and IO count.
 	privileged bool
 
-	stats    procStats
-	process  *process.Process
+	stats procStats
+	// process  *process.Process
+	process  Process
 	lastCPU  CPUInfo
 	lastTime time.Time
 
@@ -64,8 +65,8 @@ var _ Snapshot = (*linuxProcess)(nil) // static interface assertion
 
 // getLinuxProcess returns a linux process snapshot, trying to reuse the data from a previous snapshot of the same
 // process.
-func getLinuxProcess(pid int32, previous *linuxProcess, privileged bool) (*linuxProcess, error) {
-	var gops *process.Process
+func getLinuxProcess(pid int32, previous *linuxProcess, privileged bool, processRetriever ProcessRetriever) (*linuxProcess, error) {
+	// var gops process.Process
 	var err error
 
 	procStats, err := readProcStat(pid)
@@ -79,7 +80,9 @@ func getLinuxProcess(pid int32, previous *linuxProcess, privileged bool) (*linux
 	// if a process with the same CommandName but different CmdLine or User name
 	// occupies the same PID, the cache won't refresh the CmdLine and Username.
 	if previous == nil || procStats.command != previous.Command() || procStats.ppid != previous.Ppid() {
-		gops, err = process.NewProcess(pid)
+		// gopsOrig, err := process.NewProcess(pid)
+		// fmt.Println(gopsOrig)
+		gops, err := processRetriever(pid)
 		if err != nil {
 			return nil, err
 		}
@@ -126,16 +129,7 @@ func (pw *linuxProcess) Username() (string, error) {
 }
 
 func (pw *linuxProcess) uid() (int32, error) {
-	uuids, err := pw.process.Uids()
-	if err != nil {
-		return 0, fmt.Errorf("error getting process uids: %w", err) //nolint:wrapcheck
-	}
-
-	if len(uuids) == 0 {
-		return 0, errInvalidUidsForProcess //nolint:wrapcheck
-	}
-
-	return uuids[0], nil
+	return pw.process.UID()
 }
 
 // usernameFromGetent returns the username using getent https://man7.org/linux/man-pages/man1/getent.1.html
@@ -167,7 +161,7 @@ func (pw *linuxProcess) NumFDs() (int32, error) {
 	if !pw.privileged {
 		return -1, nil
 	}
-	pid := pw.process.Pid
+	pid := pw.process.ProcessId()
 	statPath := helpers.HostProc(strconv.Itoa(int(pid)), "fd")
 	d, err := os.Open(statPath)
 	if err != nil {

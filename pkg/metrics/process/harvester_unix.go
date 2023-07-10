@@ -30,3 +30,5 @@ type Harvester interface {
 	// for the last elapsedSeconds
 	Do(pid int32, elapsedSeconds float64) (*types.ProcessSample, error)
 }
+
+type ProcessRetriever func(int32) (Process, error)
